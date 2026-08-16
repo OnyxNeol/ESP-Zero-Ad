@@ -2,6 +2,7 @@
 #define DNS_SERVER_H
 
 #include <Arduino.h>
+#include "config.h"
 #include <WiFiUdp.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>

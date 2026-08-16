@@ -91,17 +91,22 @@ void setup() {
         ESP.restart();
     }
 
+    // --- Start BLE IMMEDIATELY - laptop can see it right after flashing ---
+    // BLE starts before WiFi so the device is discoverable even during setup
+    BLEMgr.begin();
+    DEBUG_PRINTLN(F("[BOOT] BLE advertising as 'ESP-Zero-Ad' - discoverable now"));
+
     // --- Load WiFi config from wifi_config.json (file-based, no terminal) ---
     if (!SetupWizard::isConfigured()) {
-        DEBUG_PRINTLN(F("[BOOT] ERROR: wifi_config.json not configured!"));
-        DEBUG_PRINTLN(F("[BOOT] Edit firmware/data/wifi_config.json with your"));
-        DEBUG_PRINTLN(F("[BOOT] WiFi credentials, then reflash with:"));
-        DEBUG_PRINTLN(F("[BOOT]   pio run --target uploadfs"));
+        DEBUG_PRINTLN(F("[BOOT] WARNING: wifi_config.json not configured!"));
+        DEBUG_PRINTLN(F("[BOOT] BLE is active - pair via Bluetooth to see device info."));
 
-        // Blink LED rapidly to indicate config error
+        // Keep BLE running and blink LED to indicate config needed
+        // Device stays discoverable via BLE even without WiFi
         while (true) {
             blinkLED(2, 200);
             delay(2000);
+            BLEMgr.loop();
         }
     }
 
@@ -149,10 +154,9 @@ void setup() {
         WebServerMgr.begin(WEB_SERVER_PORT);
         DEBUG_PRINTLN(F("[BOOT] Web dashboard started on port 80"));
 
-        // --- Start BLE server for Bluetooth pairing ---
-        BLEMgr.begin();
+        // --- BLE already started at boot — still advertising ---
 
-        // --- Done — dashboard is accessible ---
+        // --- Done - dashboard is accessible ---
         DEBUG_PRINTLN();
         DEBUG_PRINTLN(F("============================================"));
         DEBUG_PRINTLN(F("  ESP32-S3 Pi-Hole is RUNNING!"));

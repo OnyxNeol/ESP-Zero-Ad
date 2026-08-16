@@ -22,6 +22,7 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <WiFi.h>
 
 BLEServerManager BLEMgr;
 
@@ -95,7 +96,7 @@ void BLEServerManager::begin() {
     BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
     pAdvertising->setScanResponse(true);
-    pAdvertising->setMinPreferredInterval(0x06);
+    pAdvertising->setMinPreferred(0x06);
     pAdvertising->setMinInterval(0x20);
     pAdvertising->setMaxInterval(0x40);
     BLEDevice::startAdvertising();
@@ -119,9 +120,15 @@ void BLEServerManager::updateDeviceInfo() {
     // Build JSON with device info
     JsonDocument doc;
     doc["hostname"] = "esp32-pihole.local";
-    doc["ip"] = WiFi.localIP().toString();
-    doc["ssid"] = WiFi.SSID();
-    doc["rssi"] = WiFi.RSSI();
+    if (WiFi.status() == WL_CONNECTED) {
+        doc["ip"] = WiFi.localIP().toString();
+        doc["ssid"] = WiFi.SSID();
+        doc["rssi"] = WiFi.RSSI();
+    } else {
+        doc["ip"] = "0.0.0.0";
+        doc["ssid"] = "Not connected";
+        doc["rssi"] = 0;
+    }
     doc["blockListSize"] = Blocklist.getBlockedCount();
     doc["testRun"] = AdGuardTest.hasTestRun();
 
