@@ -30,12 +30,6 @@ ESP-Zero-Ad is a standalone DNS sinkhole running on an ESP32-S3. It blocks ads a
 5. Device boots, runs the ad blocker test, starts blocking
 6. Open `http://esp32-pihole.local` from any device on your network
 
-## Desktop App
-
-Download the desktop app for your platform:
-- **Windows**: `.exe` — double-click to run
-- **Linux**: `.AppImage` — `chmod +x && ./ESP-Zero-Ad*.AppImage`
-- **macOS**: `.dmg` — drag to Applications
 
 ## Hardware
 
@@ -48,7 +42,6 @@ Download the desktop app for your platform:
 - LittleFS for persistent storage
 - mDNS for local discovery
 - ESP Web Tools for browser-based flashing
-- Electron for desktop app packaging
 - GitHub Actions for CI/CD
 
 ## License
