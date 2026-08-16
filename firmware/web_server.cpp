@@ -864,15 +864,8 @@ void WebServerManager::handleWizardStatus() {
 
     // Test summary
     const auto& results = AdGuardTest.getLastResults();
-    int routerBlocks = 0;
-    int routerDoesNotBlock = 0;
-    for (const auto& r : results) {
-        if (r.routerBlocks) routerBlocks++;
-        else routerDoesNotBlock++;
-    }
     doc["testTotal"] = (int)results.size();
-    doc["testRouterBlocks"] = routerBlocks;
-    doc["testNotBlocked"] = routerDoesNotBlock;
+    doc["domainsAdded"] = Blocklist.getBlockedCount();
 
     // Uptime
     doc["uptime"] = millis() / 1000;
