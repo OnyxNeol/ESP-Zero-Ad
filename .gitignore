@@ -1,0 +1,19 @@
+# Build artifacts
+desktop/release/
+desktop/node_modules/
+firmware/.pio/
+firmware/.pio/build/
+*.o
+*.elf
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Secrets
+.env
+secrets/

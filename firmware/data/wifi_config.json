@@ -1,0 +1,8 @@
+{
+  "_comment": "Fill in your WiFi credentials here BEFORE flashing. This file gets uploaded to the ESP32-S3's LittleFS along with the web dashboard. After flashing, the ESP32-S3 reads this config, connects to your WiFi, runs the AdBlock test automatically, and starts the DNS ad-blocker. You then access the dashboard at http://esp32-pihole.local in your browser.",
+  "_instructions": "1. Edit ssid and password to match your WiFi. 2. Set routerIP to your router IP. 3. Set an apiKey (or leave as auto-generated). 4. Flash firmware: pio run --target upload. 5. Upload filesystem: pio run --target uploadfs. 6. Open http://esp32-pihole.local in your browser.",
+  "ssid": "YOUR_WIFI_SSID",
+  "password": "YOUR_WIFI_PASSWORD",
+  "routerIP": "192.168.1.1",
+  "apiKey": "auto"
+}

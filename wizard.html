@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32-S3 Pi-Hole — Setup Wizard</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --bg-secondary: #141420;
+    --bg-card: #1a1a2e;
+    --text: #e8e8f0;
+    --muted: #8892a6;
+    --border: #252538;
+    --accent: #00d4aa;
+    --accent-hover: #00f0c0;
+    --danger: #ff4757;
+    --success: #2ed573;
+    --warning: #ffa502;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .wizard-container {
+    max-width: 580px;
+    width: 100%;
+  }
+
+  /* Header */
+  .wizard-header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  .wizard-logo {
+    font-size: 3rem;
+    margin-bottom: 8px;
+  }
+  .wizard-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .wizard-subtitle {
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  /* Progress bar */
+  .progress-steps {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 32px;
+    position: relative;
+  }
+  .progress-steps::before {
+    content: '';
+    position: absolute;
+    top: 20px;
+    left: 40px;
+    right: 40px;
+    height: 2px;
+    background: var(--border);
+    z-index: 0;
+  }
+  .progress-line-fill {
+    position: absolute;
+    top: 20px;
+    left: 40px;
+    height: 2px;
+    background: var(--accent);
+    z-index: 1;
+    transition: width 0.4s ease;
+  }
+  .step-dot {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--bg-secondary);
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.9rem;
+    position: relative;
+    z-index: 2;
+    transition: all 0.3s ease;
+    color: var(--muted);
+  }
+  .step-dot.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 0 4px rgba(0, 212, 170, 0.15);
+  }
+  .step-dot.done {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0a0a0f;
+  }
+  .step-label {
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 6px;
+    transition: color 0.3s;
+  }
+  .step-label.active { color: var(--accent); }
+  .step-wrapper { display: flex; flex-direction: column; align-items: center; }
+
+  /* Card */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+  }
+
+  /* Form */
+  .form-group { margin-bottom: 20px; }
+  .form-label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+  .form-hint {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .form-input {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 0.95rem;
+    font-family: inherit;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+  }
+  .form-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.12);
+  }
+  .form-input.error {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 3px rgba(255, 71, 87, 0.12);
+  }
+  .form-input::placeholder { color: #555; }
+
+  .input-with-button {
+    position: relative;
+  }
+  .input-with-button .toggle-btn {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  .input-with-button .toggle-btn:hover { color: var(--text); }
+
+  .input-row {
+    display: flex;
+    gap: 10px;
+  }
+  .input-row .form-input { flex: 1; }
+
+  /* Radio cards */
+  .radio-group { display: flex; gap: 10px; }
+  .radio-card {
+    flex: 1;
+    padding: 14px;
+    background: var(--bg-secondary);
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+  }
+  .radio-card:hover { border-color: var(--muted); }
+  .radio-card.selected {
+    border-color: var(--accent);
+    background: rgba(0, 212, 170, 0.06);
+  }
+  .radio-card-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .radio-card-desc {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  /* Buttons */
+  .btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #0a0a0f;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .btn-secondary {
+    background: var(--bg-secondary);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--muted); }
+  .btn-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  /* Step content */
+  .step-content { display: none; }
+  .step-content.active { display: block; animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .step-heading {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .step-desc {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 24px;
+    line-height: 1.5;
+  }
+
+  /* Info box */
+  .info-box {
+    background: rgba(0, 212, 170, 0.06);
+    border: 1px solid rgba(0, 212, 170, 0.2);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 0.82rem;
+    color: #aabbcc;
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  .info-box strong { color: var(--accent); }
+  .info-box.warning {
+    background: rgba(255, 165, 2, 0.06);
+    border-color: rgba(255, 165, 2, 0.2);
+  }
+  .info-box.warning strong { color: var(--warning); }
+
+  /* Generated config preview */
+  .config-preview {
+    background: #0d0d14;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.82rem;
+    color: #aabbcc;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin-bottom: 20px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  /* Flash instructions */
+  .flash-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 14px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .flash-step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #0a0a0f;
+    font-weight: 700;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .flash-step-content { flex: 1; }
+  .flash-step-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 4px; }
+  .flash-step-desc { font-size: 0.8rem; color: var(--muted); line-height: 1.4; }
+  .flash-step code {
+    background: var(--bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    color: var(--accent);
+  }
+  .copy-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    cursor: pointer;
+    margin-left: 6px;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--muted); }
+
+  /* Success animation */
+  .success-check {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--success);
+    margin: 0 auto 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    animation: pop 0.4s ease;
+  }
+  @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+
+  /* Responsive */
+  @media (max-width: 580px) {
+    .card { padding: 20px; }
+    .progress-steps { margin-bottom: 24px; }
+    .step-label { font-size: 0.65rem; }
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { width:32px; height:32px; border:3px solid var(--border); border-top-color: var(--accent); border-radius:50%; animation: spin 1s linear infinite; }
+  ul { color: var(--muted); }
+  ol { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="wizard-container">
+
+  <!-- Header -->
+  <div class="wizard-header">
+    <div class="wizard-logo">🛡️</div>
+    <div class="wizard-title">ESP32-S3 Pi-Hole</div>
+    <div class="wizard-subtitle">Setup Wizard — configure your DNS ad-blocker</div>
+  </div>
+
+  <!-- Progress Steps -->
+  <div class="progress-steps" id="progress-steps">
+    <div class="step-wrapper">
+      <div class="step-dot active" id="dot-1">1</div>
+      <div class="step-label active" id="label-1">WiFi</div>
+    </div>
+    <div class="step-wrapper">
+      <div class="step-dot" id="dot-2">2</div>
+      <div class="step-label" id="label-2">Router</div>
+    </div>
+    <div class="step-wrapper">
+      <div class="step-dot" id="dot-3">3</div>
+      <div class="step-label" id="label-3">Password</div>
+    </div>
+    <div class="step-wrapper">
+      <div class="step-dot" id="dot-4">4</div>
+      <div class="step-label" id="label-4">Review</div>
+    </div>
+    <div class="step-wrapper">
+      <div class="step-dot" id="dot-5">5</div>
+      <div class="step-label" id="label-5">Flash</div>
+    </div>
+    <div class="step-wrapper">
+      <div class="step-dot" id="dot-6">6</div>
+      <div class="step-label" id="label-6">Connect</div>
+    </div>
+  </div>
+
+  <!-- Card with steps -->
+  <div class="card">
+
+    <!-- Step 1: WiFi -->
+    <div class="step-content active" id="step-1">
+      <div class="step-heading">WiFi Network</div>
+      <div class="step-desc">Enter your existing WiFi network credentials. The ESP32-S3 will join this network — no hotspot is created.</div>
+
+      <div class="form-group">
+        <label class="form-label">WiFi Network Name (SSID)</label>
+        <input type="text" class="form-input" id="wifi-ssid" placeholder="e.g. MyHomeWiFi" autocomplete="off">
+        <div class="form-hint">The name of the WiFi network your ESP32-S3 will connect to.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">WiFi Password</label>
+        <div class="input-with-button">
+          <input type="password" class="form-input" id="wifi-password" placeholder="Your WiFi password" autocomplete="off">
+          <button class="toggle-btn" onclick="togglePassword('wifi-password', this)">Show</button>
+        </div>
+        <div class="form-hint">The password for your WiFi network.</div>
+      </div>
+
+      <div class="btn-row">
+        <span></span>
+        <button class="btn btn-primary" onclick="nextStep(1)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Router -->
+    <div class="step-content" id="step-2">
+      <div class="step-heading"> Router (Ad Blocker Service)</div>
+      <div class="step-desc">Enter your router's IP address. The ESP32-S3 will test each ad domain against the router ad blocker service and only block the ones the router can't handle.</div>
+
+      <div class="info-box">
+        <strong>Why this matters:</strong> The ESP32-S3 tests 129 ad/tracker domains from adblock.turtlecute.org against your router. If the router can already block a domain, the ESP32-S3 skips it — avoiding duplicate blocking and saving memory.
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Router IP Address</label>
+        <input type="text" class="form-input" id="router-ip" placeholder="192.168.1.1" value="192.168.1.1">
+        <div class="form-hint">The IP address of your router running ad blocker service. Usually 192.168.1.1 or 192.168.50.1.</div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="prevStep(2)">← Back</button>
+        <button class="btn btn-primary" onclick="nextStep(2)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: API Key -->
+    <div class="step-content" id="step-3">
+      <div class="step-heading">Dashboard Password</div>
+      <div class="step-desc">This is a local password that protects your ESP32-S3 management dashboard. It is NOT a third-party API key (no Brave, Google, or external service needed). It only exists between your browser and the ESP32-S3 on your local network.</div>
+
+      <div class="radio-group" id="api-key-options">
+        <div class="radio-card selected" onclick="selectApiKeyOption('auto', this)">
+          <div class="radio-card-title">🔑 Auto-Generate</div>
+          <div class="radio-card-desc">ESP32-S3 creates a random password on first boot</div>
+        </div>
+        <div class="radio-card" onclick="selectApiKeyOption('custom', this)">
+          <div class="radio-card-title">✏️ Custom Password</div>
+          <div class="radio-card-desc">Pick your own dashboard password</div>
+        </div>
+      </div>
+
+      <div class="form-group" id="custom-key-group" style="display:none; margin-top:16px">
+        <label class="form-label">Your Dashboard Password</label>
+        <div class="input-with-button">
+          <input type="text" class="form-input" id="custom-api-key" placeholder="e.g. my-secret-key-123">
+          <button class="toggle-btn" onclick="togglePassword('custom-api-key', this)">Show</button>
+        </div>
+        <div class="form-hint">You'll need this key to log into the dashboard.</div>
+      </div>
+
+      <div class="info-box" style="margin-top:16px">
+        <strong>What is this?</strong> This is just a local password for your dashboard — like a Wi-Fi password but for the admin panel. No external registration needed. Nothing is sent to any external service.
+      </div>
+      <div class="info-box" style="margin-top:8px">
+        <strong>After flashing:</strong> If you chose auto-generate, the password appears on the first-run wizard page at <code>http://esp32-pihole.local</code>. If you chose custom, use the one you set here.
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="prevStep(3)">← Back</button>
+        <button class="btn btn-primary" onclick="nextStep(3)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Review -->
+    <div class="step-content" id="step-4">
+      <div class="step-heading">Review Your Configuration</div>
+      <div class="step-desc">Check everything looks right, then save your config file. Click <strong>"Save to firmware/data/wifi_config.json"</strong> to write it directly, or use Download to save it manually.</div>
+
+      <div id="review-content"></div>
+
+      <div class="form-group" style="margin-top:20px">
+        <label class="form-label">Generated wifi_config.json</label>
+        <div class="config-preview" id="config-preview"></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="prevStep(4)">← Back</button>
+        <div style="display:flex; gap:10px">
+          <button class="btn btn-secondary" onclick="copyConfig()">📋 Copy</button>
+          <button class="btn btn-secondary" onclick="downloadConfig()">⬇ Download</button>
+          <button class="btn btn-primary" onclick="saveDirectly()" id="save-direct-btn">💾 Save to firmware/data/wifi_config.json</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5: Flash -->
+    <div class="step-content" id="step-5">
+      <div class="step-heading">Flash Your ESP32-S3</div>
+      <div class="step-desc">Connect your ESP32-S3 via USB, then click the button below to flash the firmware directly from your browser — no terminal needed.</div>
+
+      <div class="info-box">
+        <strong>Before you flash:</strong> Make sure you saved <code>wifi_config.json</code> to <code>firmware/data/</code> in Step 4. The flash button below sends the firmware + your config file to the ESP32-S3 over USB.
+      </div>
+
+      <div id="flash-area" style="text-align:center; padding:20px 0">
+        <div id="esp-web-tools-button"></div>
+        <p class="muted" style="font-size:0.8rem; margin-top:16px" id="flash-status">
+          Connect your ESP32-S3 via USB cable, then click "Connect" above.
+        </p>
+      </div>
+
+      <div class="info-box warning" id="flash-fallback" style="display:none">
+        <strong>Web Serial not supported?</strong> If your browser doesn't support web-based flashing:
+        <ol style="margin-top:8px; padding-left:20px; line-height:1.6">
+          <li>Install <a href="https://platformio.org/" target="_blank" style="color:var(--warning)">PlatformIO</a></li>
+          <li>Run: <code>pio run --target upload</code> (flash firmware)</li>
+          <li>Run: <code>pio run --target uploadfs</code> (flash filesystem with your config)</li>
+        </ol>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="prevStep(5)">← Back</button>
+        <button class="btn btn-primary" onclick="nextStep(5)" id="flash-next-btn" disabled style="opacity:0.4">Flash Complete — Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 6: Connect -->
+    <div class="step-content" id="step-6">
+      <div class="step-heading">Check Connection</div>
+      <div class="step-desc">After flashing, the ESP32-S3 boots, connects to WiFi, and runs the ad blocker test. This takes ~30 seconds. Let's check if it's online.</div>
+
+      <div id="connect-checking" style="text-align:center; padding:40px 0">
+        <div class="spinner" style="width:32px;height:32px;border-width:3px;margin:0 auto;border-style:solid;border-color:var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite"></div>
+        <p class="muted" style="margin-top:16px; font-size:0.9rem" id="connect-status">Looking for ESP32-S3 at http://esp32-pihole.local…</p>
+        <p class="muted" style="font-size:0.78rem; margin-top:8px" id="connect-substatus">This usually takes 30-60 seconds after flashing.</p>
+      </div>
+
+      <div id="connect-success" style="display:none; text-align:center; padding:20px 0">
+        <div class="success-check">✓</div>
+        <h3 style="font-size:1.2rem; margin-bottom:8px">ESP32-S3 is Online!</h3>
+        <div id="connect-device-info" style="text-align:left; margin:16px 0"></div>
+      </div>
+
+      <div id="connect-failed" style="display:none; text-align:center; padding:20px 0">
+        <p style="font-size:1.2rem; margin-bottom:12px">⚠ Could not reach the ESP32-S3</p>
+        <div class="info-box" style="text-align:left">
+          <strong>Things to check:</strong>
+          <ul style="margin-top:8px; padding-left:20px; line-height:1.6; font-size:0.85rem">
+            <li>Is the ESP32-S3 still connected to USB power?</li>
+            <li>Are you on the same WiFi network you configured?</li>
+            <li>Try opening <code>http://esp32-pihole.local</code> directly in a new tab</li>
+            <li>Check your router's DHCP list for the ESP32-S3's IP</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="prevStep(6)">← Back</button>
+        <div style="display:flex; gap:10px">
+          <button class="btn btn-secondary" onclick="retryConnection()" id="retry-btn" style="display:none">🔄 Retry</button>
+          <button class="btn btn-primary" onclick="openDashboard()" id="open-dashboard-btn" style="display:none; background:var(--success)">🚀 Open Dashboard</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <p style="text-align:center; margin-top:20px; color:var(--muted); font-size:0.78rem">
+    ESP32-S3 Pi-Hole Setup Wizard • All data stays on your device
+  </p>
+
+</div>
+
+<script>
+// ============================================================
+// Wizard State
+// ============================================================
+let currentStep = 1;
+const totalSteps = 6;
+let apiKeyMode = 'auto';
+let generatedConfig = null;
+
+// ============================================================
+// Navigation
+// ============================================================
+function nextStep(from) {
+  if (!validateStep(from)) return;
+  showStep(from + 1);
+}
+
+function prevStep(from) {
+  showStep(from - 1);
+}
+
+function showStep(step) {
+  // Clamp
+  if (step < 1) step = 1;
+  if (step > totalSteps) step = totalSteps;
+  currentStep = step;
+
+  // Show/hide step content
+  document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
+  const content = document.getElementById('step-' + step);
+  if (content) content.classList.add('active');
+
+  // Update progress dots
+  for (let i = 1; i <= totalSteps; i++) {
+    const dot = document.getElementById('dot-' + i);
+    const label = document.getElementById('label-' + i);
+    dot.classList.remove('active', 'done');
+    label.classList.remove('active');
+    if (i < step) {
+      dot.classList.add('done');
+      dot.innerHTML = '✓';
+    } else if (i === step) {
+      dot.classList.add('active');
+      dot.innerHTML = String(i);
+      label.classList.add('active');
+    } else {
+      dot.innerHTML = String(i);
+    }
+  }
+
+  // Update progress line
+  updateProgressLine(step);
+
+  // Generate review if on step 4
+  if (step === 4) generateReview();
+
+  // Scroll to top
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function updateProgressLine(step) {
+  const oldLine = document.querySelector('.progress-line-fill');
+  if (oldLine) oldLine.remove();
+
+  const stepsContainer = document.getElementById('progress-steps');
+  const totalWidth = stepsContainer.offsetWidth - 80; // minus dot widths
+  const segmentWidth = totalWidth / (totalSteps - 1);
+  const fillWidth = segmentWidth * (step - 1);
+
+  const line = document.createElement('div');
+  line.className = 'progress-line-fill';
+  line.style.width = fillWidth + 'px';
+  stepsContainer.appendChild(line);
+}
+
+// ============================================================
+// Validation
+// ============================================================
+function validateStep(step) {
+  if (step === 1) {
+    const ssid = document.getElementById('wifi-ssid').value.trim();
+    const password = document.getElementById('wifi-password').value.trim();
+    if (!ssid) {
+      markError('wifi-ssid', 'Please enter your WiFi network name');
+      return false;
+    }
+    clearError('wifi-ssid');
+    return true;
+  }
+  if (step === 2) {
+    const ip = document.getElementById('router-ip').value.trim();
+    if (!ip || !/^(\d{1,3}\.){3}\d{1,3}$/.test(ip) || ip.split('.').every(o => parseInt(o) >= 0 && parseInt(o) <= 255) === false) {
+      markError('router-ip', 'Enter a valid IP address (e.g. 192.168.1.1)');
+      return false;
+    }
+    clearError('router-ip');
+    return true;
+  }
+  if (step === 3) {
+    if (apiKeyMode === 'custom') {
+      const key = document.getElementById('custom-api-key').value.trim();
+      if (!key) {
+        markError('custom-api-key', 'Please enter an API key or choose auto-generate');
+        return false;
+      }
+      clearError('custom-api-key');
+    }
+    return true;
+  }
+  return true;
+}
+
+function markError(id, msg) {
+  const el = document.getElementById(id);
+  el.classList.add('error');
+  el.focus();
+  // Remove error class after 2 seconds
+  setTimeout(() => el.classList.remove('error'), 2000);
+}
+
+function clearError(id) {
+  document.getElementById(id).classList.remove('error');
+}
+
+// ============================================================
+// API Key Options
+// ============================================================
+function selectApiKeyOption(mode, el) {
+  apiKeyMode = mode;
+  document.querySelectorAll('.radio-card').forEach(card => card.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('custom-key-group').style.display = mode === 'custom' ? 'block' : 'none';
+}
+
+// ============================================================
+// Password Toggle
+// ============================================================
+function togglePassword(id, btn) {
+  const input = document.getElementById(id);
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = 'Hide';
+  } else {
+    input.type = 'password';
+    btn.textContent = 'Show';
+  }
+}
+
+// ============================================================
+// Generate Config
+// ============================================================
+function getConfig() {
+  const ssid = document.getElementById('wifi-ssid').value.trim();
+  const password = document.getElementById('wifi-password').value.trim();
+  const routerIP = document.getElementById('router-ip').value.trim();
+  let apiKey = 'auto';
+  if (apiKeyMode === 'custom') {
+    apiKey = document.getElementById('custom-api-key').value.trim() || 'auto';
+  }
+  return { ssid, password, routerIP, apiKey };
+}
+
+function generateReview() {
+  const config = getConfig();
+  generatedConfig = config;
+
+  // Review summary
+  const apiKeyDisplay = config.apiKey === 'auto'
+    ? '<span style="color:var(--muted)">Auto-generated on first boot (shown at esp32-pihole.local)</span>'
+    : '<code style="color:var(--accent)">' + escapeHTML(config.apiKey) + '</code>';
+
+  document.getElementById('review-content').innerHTML = `
+    <div class="info-box">
+      <div style="display:flex; justify-content:space-between; padding:4px 0">
+        <span style="color:var(--muted)">WiFi Network</span>
+        <strong>${escapeHTML(config.ssid)}</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between; padding:4px 0">
+        <span style="color:var(--muted)">WiFi Password</span>
+        <strong>${config.password ? '••••••••' : '<span style="color:var(--danger)">Not set</span>'}</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between; padding:4px 0">
+        <span style="color:var(--muted)">Router IP</span>
+        <strong>${escapeHTML(config.routerIP)}</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between; padding:4px 0">
+        <span style="color:var(--muted)">API Key</span>
+        <strong>${apiKeyDisplay}</strong>
+      </div>
+    </div>
+  `;
+
+  // Config preview
+  const json = JSON.stringify({
+    ssid: config.ssid,
+    password: config.password,
+    routerIP: config.routerIP,
+    apiKey: config.apiKey
+  }, null, 2);
+  document.getElementById('config-preview').textContent = json;
+}
+
+// ============================================================
+// Download / Copy Config
+// ============================================================
+function downloadConfig() {
+  const config = getConfig();
+  const json = JSON.stringify({
+    ssid: config.ssid,
+    password: config.password,
+    routerIP: config.routerIP,
+    apiKey: config.apiKey
+  }, null, 2);
+
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'wifi_config.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function copyConfig() {
+  const config = getConfig();
+  const json = JSON.stringify({
+    ssid: config.ssid,
+    password: config.password,
+    routerIP: config.routerIP,
+    apiKey: config.apiKey
+  }, null, 2);
+  copyText(json);
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    // Brief visual feedback
+    const btns = document.querySelectorAll('.copy-btn');
+    btns.forEach(btn => {
+      if (btn.onclick && btn.onclick.toString().includes(text)) {
+        const orig = btn.textContent;
+        btn.textContent = '✓ copied';
+        btn.style.color = 'var(--success)';
+        setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500);
+      }
+    });
+  });
+}
+
+// ============================================================
+// Save directly to file (File System Access API)
+// ============================================================
+async function saveDirectly() {
+  const config = getConfig();
+  const json = JSON.stringify({
+    ssid: config.ssid,
+    password: config.password,
+    routerIP: config.routerIP,
+    apiKey: config.apiKey
+  }, null, 2);
+
+  // Check if the browser supports the File System Access API
+  if ('showSaveFilePicker' in window) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: 'wifi_config.json',
+        types: [{
+          description: 'JSON config file',
+          accept: { 'application/json': ['.json'] }
+        }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(json);
+      await writable.close();
+
+      const btn = document.getElementById('save-direct-btn');
+      btn.innerHTML = '✓ Saved!';
+      btn.style.background = 'var(--success)';
+      btn.disabled = true;
+
+      // Show confirmation
+      const preview = document.getElementById('config-preview');
+      preview.insertAdjacentHTML('afterend',
+        '<div class="info-box" style="margin-top:12px"><strong>✓ Saved!</strong> ' +
+        'wifi_config.json has been written with your WiFi credentials. ' +
+        'Move it to <code>firmware/data/</code> if you saved it elsewhere, ' +
+        'then proceed to Step 5 to flash.</div>'
+      );
+      return;
+    } catch (err) {
+      if (err.name === 'AbortError') return; // user cancelled
+      // Fall through to download
+    }
+  }
+
+  // Fallback: regular download
+  downloadConfig();
+  const btn = document.getElementById('save-direct-btn');
+  btn.innerHTML = '⬇ Downloaded — move to firmware/data/';
+  btn.style.background = 'var(--warning)';
+}
+
+// ============================================================
+// Finish
+// ============================================================
+function finishWizard() {
+  // Try to open the dashboard
+  window.open('http://esp32-pihole.local', '_blank');
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+function escapeHTML(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ============================================================
+// ESP Web Tools — Browser-based flashing
+// ============================================================
+let flashComplete = false;
+
+function initFlashButton() {
+  // Check if Web Serial is supported
+  if (!('serial' in navigator)) {
+    document.getElementById('flash-fallback').style.display = 'block';
+    document.getElementById('flash-status').innerHTML = 'Your browser does not support USB flashing. Use the fallback commands below, or try Chrome/Edge.';
+    return;
+  }
+
+  // Load ESP Web Tools
+  if (document.getElementById('esp-web-tools-script')) {
+    mountFlashButton();
+    return;
+  }
+
+  const script = document.createElement('script');
+  script.id = 'esp-web-tools-script';
+  script.src = 'https://unpkg.com/esp-web-tools@9/dist/web/esp-web-tools.js';
+  script.onload = mountFlashButton;
+  script.onerror = () => {
+    document.getElementById('flash-fallback').style.display = 'block';
+    document.getElementById('flash-status').innerHTML = 'Could not load the flash tool. Check your internet connection or use the fallback commands below.';
+  };
+  document.head.appendChild(script);
+}
+
+function mountFlashButton() {
+  if (typeof ESPWebTools === 'undefined') return;
+
+  const button = document.getElementById('esp-web-tools-button');
+
+  try {
+    const installButton = ESPWebTools.connect({
+      manifestUrl: 'manifest.json',
+      onProgress: (progress) => {
+        const pct = Math.round((progress.sent / progress.total) * 100);
+        document.getElementById('flash-status').innerHTML = 
+          'Flashing… <strong>' + pct + '%</strong>';
+      },
+      onSuccess: () => {
+        document.getElementById('flash-status').innerHTML = 
+          '✓ Flash complete! The ESP32-S3 is rebooting and connecting to WiFi…';
+        const nextBtn = document.getElementById('flash-next-btn');
+        nextBtn.disabled = false;
+        nextBtn.style.opacity = '1';
+        flashComplete = true;
+      },
+      onError: (err) => {
+        document.getElementById('flash-status').innerHTML = 
+          '✕ Flash failed: ' + (err.message || err) + '. Try disconnecting and reconnecting the USB cable.';
+      }
+    });
+    button.appendChild(installButton);
+  } catch (err) {
+    document.getElementById('flash-fallback').style.display = 'block';
+    document.getElementById('flash-status').innerHTML = 'Flash tool error: ' + err.message;
+  }
+}
+
+// ============================================================
+// Connection Check — poll for the ESP32-S3 after flashing
+// ============================================================
+let connectPollTimer = null;
+let connectAttempts = 0;
+const MAX_CONNECT_ATTEMPTS = 20; // 20 attempts × 3s = 60 seconds
+
+function startConnectionCheck() {
+  connectAttempts = 0;
+  document.getElementById('connect-checking').style.display = 'block';
+  document.getElementById('connect-success').style.display = 'none';
+  document.getElementById('connect-failed').style.display = 'none';
+  document.getElementById('retry-btn').style.display = 'none';
+  document.getElementById('open-dashboard-btn').style.display = 'none';
+  pollConnection();
+}
+
+function pollConnection() {
+  if (connectAttempts >= MAX_CONNECT_ATTEMPTS) {
+    showConnectionFailed();
+    return;
+  }
+
+  connectAttempts++;
+  const statusEl = document.getElementById('connect-status');
+  statusEl.textContent = 'Looking for ESP32-S3 at http://esp32-pihole.local… (attempt ' + connectAttempts + '/' + MAX_CONNECT_ATTEMPTS + ')';
+
+  // Try fetching the wizard status endpoint (no auth needed)
+  fetch('http://esp32-pihole.local/api/wizard/status', { mode: 'cors', signal: AbortSignal.timeout(2500) })
+    .then(resp => resp.json())
+    .then(data => {
+      showConnectionSuccess(data);
+    })
+    .catch(() => {
+      // Also try the IP directly (mDNS might not resolve on all networks)
+      connectAttempts < 5 ? pollConnection() : tryIPFallback();
+    });
+
+  if (connectAttempts < MAX_CONNECT_ATTEMPTS) {
+    connectPollTimer = setTimeout(pollConnection, 3000);
+  }
+}
+
+function tryIPFallback() {
+  // Try common ESP32 IPs — user can also enter custom IP
+  const candidateIPs = ['192.168.1.100', '192.168.1.101', '192.168.1.50', '192.168.50.100'];
+  let tried = 0;
+
+  for (const ip of candidateIPs) {
+    fetch('http://' + ip + '/api/wizard/status', { mode: 'cors', signal: AbortSignal.timeout(2000) })
+      .then(resp => resp.json())
+      .then(data => {
+        showConnectionSuccess(data, ip);
+      })
+      .catch(() => {
+        tried++;
+        if (tried >= candidateIPs.length && connectAttempts >= MAX_CONNECT_ATTEMPTS) {
+          showConnectionFailed();
+        }
+      });
+  }
+}
+
+function showConnectionSuccess(data, ip) {
+  clearTimeout(connectPollTimer);
+  const info = data || {};
+  const deviceIP = ip || info.ip || 'esp32-pihole.local';
+
+  document.getElementById('connect-checking').style.display = 'none';
+  document.getElementById('connect-success').style.display = 'block';
+  document.getElementById('retry-btn').style.display = 'none';
+  document.getElementById('open-dashboard-btn').style.display = 'inline-flex';
+
+  document.getElementById('connect-device-info').innerHTML = `
+    <div class="info-box">
+      <div style="display:flex; justify-content:space-between; padding:4px 0">
+        <span style="color:var(--muted)">WiFi Network</span>
+        <strong>${info.ssid || 'Connected'}</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between; padding:4px 0">
+        <span style="color:var(--muted)">IP Address</span>
+        <strong>${deviceIP}</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between; padding:4px 0">
+        <span style="color:var(--muted)">Dashboard URL</span>
+        <strong>http://${info.hostname || 'esp32-pihole.local'}</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between; padding:4px 0">
+        <span style="color:var(--muted)">Ad Blocker Test</span>
+        <strong>${info.testRun ? '✓ Complete (' + (info.testTotal || 129) + ' domains tested)' : 'Running…'}</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between; padding:4px 0">
+        <span style="color:var(--muted)">Block List Size</span>
+        <strong>${info.blockListSize || 0} domains</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between; padding:4px 0">
+        <span style="color:var(--muted)">WiFi Signal</span>
+        <strong>${info.rssi || '—'} dBm</strong>
+      </div>
+    </div>
+  `;
+}
+
+function showConnectionFailed() {
+  clearTimeout(connectPollTimer);
+  document.getElementById('connect-checking').style.display = 'none';
+  document.getElementById('connect-failed').style.display = 'block';
+  document.getElementById('retry-btn').style.display = 'inline-flex';
+  document.getElementById('open-dashboard-btn').style.display = 'none';
+}
+
+function retryConnection() {
+  startConnectionCheck();
+}
+
+function openDashboard() {
+  window.open('http://esp32-pihole.local', '_blank');
+}
+
+// Override nextStep to trigger flash init and connection check
+const originalNextStep = nextStep;
+nextStep = function(from) {
+  if (!validateStep(from)) return;
+  if (from === 4) {
+    // Going from Review to Flash — init the flash button
+    setTimeout(initFlashButton, 200);
+  }
+  if (from === 5) {
+    // Going from Flash to Connect — start polling
+    setTimeout(startConnectionCheck, 500);
+  }
+  showStep(from + 1);
+};
+
+// Initialize progress line
+window.addEventListener('load', () => updateProgressLine(1));
+window.addEventListener('resize', () => updateProgressLine(currentStep));
+</script>
+
+</body>
+</html>

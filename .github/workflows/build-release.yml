@@ -1,0 +1,139 @@
+name: Build ESP-Zero-Ad Desktop Apps + Firmware
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  # ===== Build desktop apps (Windows .exe, Linux .AppImage, macOS .dmg) =====
+  build-desktop:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: desktop
+        run: npm install
+
+      - name: Build desktop app
+        working-directory: desktop
+        run: npm run build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ESP-Zero-Ad-${{ matrix.os }}
+          path: desktop/release/*
+
+  # ===== Build ESP32 firmware binaries =====
+  build-firmware:
+    runs-on: ubuntu-latest
+    container:
+      image: python:3.11-slim
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build firmware
+        working-directory: firmware
+        run: pio run
+
+      - name: Build filesystem image
+        working-directory: firmware
+        run: pio run --target buildfs
+
+      - name: Collect binaries
+        run: |
+          mkdir -p firmware-release
+          BUILD_DIR="firmware/.pio/build/esp32-s3-devkitc-1"
+          cp "$BUILD_DIR/firmware.bin" firmware-release/
+          cp "$BUILD_DIR/bootloader.bin" firmware-release/
+          cp "$BUILD_DIR/partitions.bin" firmware-release/
+          cp "$BUILD_DIR/littlefs.bin" firmware-release/
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ESP-Zero-Ad-firmware
+          path: firmware-release/*
+
+  # ===== Create GitHub Release with all artifacts =====
+  release:
+    needs: [build-desktop, build-firmware]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Organize release files
+        run: |
+          mkdir -p release
+          # Desktop apps
+          cp artifacts/ESP-Zero-Ad-windows-latest/*.exe release/ 2>/dev/null || true
+          cp artifacts/ESP-Zero-Ad-ubuntu-latest/*.AppImage release/ 2>/dev/null || true
+          cp artifacts/ESP-Zero-Ad-macos-latest/*.dmg release/ 2>/dev/null || true
+          cp artifacts/ESP-Zero-Ad-macos-latest/*.zip release/ 2>/dev/null || true
+          # Firmware
+          cp artifacts/ESP-Zero-Ad-firmware/*.bin release/ 2>/dev/null || true
+          # Manifest for ESP Web Tools
+          cp firmware/manifest.json release/ 2>/dev/null || true
+          # Wizard
+          cp wizard.html release/ 2>/dev/null || true
+          ls -la release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ESP-Zero-Ad ${{ github.ref_name }}
+          body: |
+            # ESP-Zero-Ad — ESP32-S3 DNS Sinkhole
+            
+            ## Downloads
+            
+            ### Desktop Setup Wizard
+            - **Windows**: `.exe` file — double-click to run
+            - **Linux**: `.AppImage` file — `chmod +x && ./ESP-Zero-Ad*.AppImage`
+            - **macOS**: `.dmg` file — open and drag to Applications
+            
+            ### ESP32-S3 Firmware
+            - Use the desktop wizard's "Flash" step (browser-based via ESP Web Tools)
+            - Or use the included `.bin` files with esptool/PlatformIO
+            
+            ### Web Wizard (no install)
+            - Open `wizard.html` in Chrome or Edge for browser-based flashing
+            
+            ## What's Included
+            - ESP32-S3 firmware (DNS sinkhole + web dashboard)
+            - 6-step GUI setup wizard (no terminal needed)
+            - Browser-based flashing via ESP Web Tools
+            - Router ad blocker integration (only blocks what the router can't)
+            - Real-time DNS query stats
+            - Router reports + Overall coverage dashboard
+          files: release/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
