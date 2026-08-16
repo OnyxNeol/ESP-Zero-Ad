@@ -15,8 +15,9 @@
 //   6. Only domains the router CANNOT block get added to the block list
 //   7. Starts DNS sinkhole (port 53) + web dashboard (port 80)
 //   8. mDNS: accessible at http://esp32-pihole.local
-//   9. User opens that URL → first-run wizard shows IP, test results,
-//      and instructions to set DNS on their devices
+//   9. BLE server advertises as "ESP-Zero-Ad" for Web Bluetooth pairing
+//  10. User opens http://esp32-pihole.local → connects via Bluetooth
+//      to authenticate (no password typing — BLE pairing IS the auth)
 //
 // NO SERIAL INPUT REQUIRED. NO HOTSPOT CREATED. NO TERMINAL NEEDED.
 // ============================================================================
@@ -35,6 +36,8 @@
 #include "web_server.h"
 #include "setup_wizard.h"
 #include "test_domains.h"
+#include "ble_server.h"
+#include <BLEDevice.h>
 
 // ============================================================================
 // Global State
@@ -146,6 +149,9 @@ void setup() {
         WebServerMgr.begin(WEB_SERVER_PORT);
         DEBUG_PRINTLN(F("[BOOT] Web dashboard started on port 80"));
 
+        // --- Start BLE server for Bluetooth pairing ---
+        BLEMgr.begin();
+
         // --- Done — dashboard is accessible ---
         DEBUG_PRINTLN();
         DEBUG_PRINTLN(F("============================================"));
@@ -183,6 +189,16 @@ void loop() {
 
     // Handle web server clients (dashboard + API)
     WebServerMgr.handleClient();
+
+    // BLE loop (event-driven, minimal work)
+    BLEMgr.loop();
+
+    // Update BLE device info periodically
+    static unsigned long lastBleUpdate = 0;
+    if (millis() - lastBleUpdate > 5000) {
+        lastBleUpdate = millis();
+        BLEMgr.updateDeviceInfo();
+    }
 
     // Check WiFi connection periodically
     if (millis() - lastWiFiCheck > 10000) {

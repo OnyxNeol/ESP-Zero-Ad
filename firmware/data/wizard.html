@@ -560,6 +560,12 @@
       <div id="connect-checking" style="text-align:center; padding:40px 0">
         <div class="spinner" style="width:32px;height:32px;border-width:3px;margin:0 auto;border-style:solid;border-color:var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite"></div>
         <p class="muted" style="margin-top:16px; font-size:0.9rem" id="connect-status">Looking for ESP32-S3 at http://esp32-pihole.local…</p>
+    <div style="margin-top:12px; padding:12px; background:var(--card); border-radius:8px; border:1px solid var(--border); text-align:left">
+      <p style="font-size:0.8rem; color:var(--muted); line-height:1.5">
+        <strong>💡 Power Tip:</strong> Plug your ESP32-S3 into a USB port on your router
+        for always-on power — no laptop needed after setup.
+      </p>
+    </div>
         <p class="muted" style="font-size:0.78rem; margin-top:8px" id="connect-substatus">This usually takes 30-60 seconds after flashing.</p>
       </div>
 
@@ -1119,11 +1125,9 @@ function retryConnection() {
 }
 
 function openDashboard() {
-  // Auto-redirect to the ESP32-S3 dashboard with setup token
-  // The dashboard will auto-authenticate and show the device registration screen
-  const password = state.dashboardPassword || '';
-  const setupUrl = 'http://esp32-pihole.local?setup=true&key=' + encodeURIComponent(password);
-  window.location.href = setupUrl;
+  // Redirect to the dashboard in setup mode
+  // The dashboard will prompt for Bluetooth pairing — no password in URL
+  window.location.href = 'http://esp32-pihole.local?setup=true';
 }
 
 // Override nextStep to trigger flash init and connection check

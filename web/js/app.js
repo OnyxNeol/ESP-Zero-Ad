@@ -112,7 +112,7 @@ class APIClient {
   async request(path, options = {}) {
     if (!App.apiKey) {
       App.promptAPIKey();
-      throw new Error('Dashboard password required');
+      throw new Error('Bluetooth connection required');
     }
     const headers = {
       'Content-Type': 'application/json',
@@ -122,7 +122,7 @@ class APIClient {
     try {
       const res = await fetch(path, { ...options, headers });
       if (res.status === 401 || res.status === 403) {
-        Toast.error('Authentication Failed', 'Invalid dashboard password. Please re-enter it.');
+        Toast.error('Authentication Failed', 'Invalid key. Reconnect via Bluetooth.');
         App.promptAPIKey();
         throw new Error('Auth failed');
       }
@@ -241,30 +241,124 @@ App.setConnection = function (connected) {
   text.textContent = connected ? 'Connected' : 'Disconnected';
 };
 
-/* ===== API Key Prompt ===== */
+/* ===== BLE Connection (Web Bluetooth) ===== */
+App.bleDevice = null;
+App.bleServer = null;
+
 App.promptAPIKey = function () {
+  // Show the BLE connect screen instead of a password input
   const overlay = document.getElementById('api-key-overlay');
-  const input = document.getElementById('api-key-input');
   overlay.style.display = 'flex';
-  input.value = App.apiKey || '';
-  input.focus();
+  // Replace overlay content with BLE connect button
+  const overlayContent = overlay.querySelector('.api-key-card') || overlay.querySelector('div');
+  if (overlayContent && !document.getElementById('ble-connect-btn')) {
+    overlayContent.innerHTML = `
+      <div style="text-align:center; padding:40px 30px">
+        <div style="width:64px; height:64px; margin:0 auto 20px; border-radius:50%;
+                    background:var(--primary); display:flex; align-items:center; justify-content:center;
+                    font-size:28px; color:white">⚡</div>
+        <h2 style="margin-bottom:8px">Connect to ESP-Zero-Ad</h2>
+        <p style="color:var(--muted); margin-bottom:24px; font-size:0.9rem">
+          Click the button below and select your ESP32-S3 device.<br>
+          Authentication happens over Bluetooth — no password needed.
+        </p>
+        <button class="btn btn-primary" onclick="App.connectBLE()"
+                id="ble-connect-btn" style="padding:12px 32px; font-size:1rem">
+          📡 Connect via Bluetooth
+        </button>
+        <p id="ble-status" style="color:var(--muted); margin-top:16px; font-size:0.85rem"></p>
+        <div style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border)">
+          <p style="color:var(--muted); font-size:0.8rem; margin-bottom:8px">
+            Already paired? Use manual key entry:
+          </p>
+          <div style="display:flex; gap:8px">
+            <input type="password" id="manual-key-input" placeholder="Dashboard password"
+                   class="input" style="flex:1" onkeypress="if(event.key==='Enter')App.saveManualKey()">
+            <button class="btn btn-secondary" onclick="App.saveManualKey()">Enter</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
 };
 
-App.saveAPIKey = function () {
-  const input = document.getElementById('api-key-input');
-  const key = input.value.trim();
-  if (!key) {
-    input.classList.add('error');
-    Toast.error('Error', 'Please enter a dashboard password.');
-    return;
-  }
-  input.classList.remove('error');
+App.saveManualKey = function () {
+  const input = document.getElementById('manual-key-input');
+  const key = input ? input.value.trim() : '';
+  if (!key) return;
   App.apiKey = key;
   localStorage.setItem('esp32_api_key', key);
   document.getElementById('api-key-overlay').style.display = 'none';
   Toast.success('Connected', 'Dashboard password saved.');
   App.setConnection(true);
   App.router();
+};
+
+App.connectBLE = async function () {
+  const statusEl = document.getElementById('ble-status');
+  const btn = document.getElementById('ble-connect-btn');
+
+  if (!navigator.bluetooth) {
+    if (statusEl) statusEl.textContent = 'Web Bluetooth not supported. Use Chrome or Edge, or enter your key manually below.';
+    return;
+  }
+
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Connecting…'; }
+    if (statusEl) statusEl.textContent = 'Select "ESP-Zero-Ad" from the device list…';
+
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ name: 'ESP-Zero-Ad' }],
+      optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
+    });
+
+    App.bleDevice = device;
+    device.addEventListener('gattserverdisconnected', () => {
+      App.bleServer = null;
+      Toast.warning('Bluetooth Disconnected', 'Device connection lost. Reconnect to continue.');
+    });
+
+    if (statusEl) statusEl.textContent = 'Pairing with ESP-Zero-Ad…';
+    const server = await device.gatt.connect();
+    App.bleServer = server;
+
+    if (statusEl) statusEl.textContent = 'Reading device info…';
+    const service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+
+    // Read API key
+    const keyChar = await service.getCharacteristic('0000ffe2-0000-1000-8000-00805f9b34fb');
+    const keyData = await keyChar.readValue();
+    const apiKey = new TextDecoder().decode(keyData);
+
+    // Read device info
+    const infoChar = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
+    const infoData = await infoChar.readValue();
+    const infoText = new TextDecoder().decode(infoData);
+    let deviceInfo = {};
+    try { deviceInfo = JSON.parse(infoText); } catch {}
+
+    // Save the API key
+    App.apiKey = apiKey;
+    localStorage.setItem('esp32_api_key', apiKey);
+
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Connected!'; }
+    if (statusEl) statusEl.textContent = '';
+
+    document.getElementById('api-key-overlay').style.display = 'none';
+    Toast.success('Connected', 'ESP-Zero-Ad paired via Bluetooth.');
+    App.setConnection(true);
+
+    // If in setup mode, show the welcome screen with device info
+    if (App._setupMode) {
+      App.showSetupWelcomeFromBLE(deviceInfo);
+    } else {
+      App.router();
+    }
+
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = '📡 Connect via Bluetooth'; }
+    if (statusEl) statusEl.textContent = err.message || 'Connection cancelled.';
+  }
 };
 
 /* ===== Router ===== */
