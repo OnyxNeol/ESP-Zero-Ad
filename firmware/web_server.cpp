@@ -317,52 +317,18 @@ void WebServerManager::handleAddBlocklist() {
         return;
     }
     String domain = doc["domain"].as<String>();
-
-    // Test against router's ad blocker service FIRST
-    // Only add if the router can't block it (domain escaped the router)
-    AdGuardTestResult result = AdGuardTest.testDomain(domain);
-
-    JsonDocument resp;
-    resp["domain"] = domain;
-    resp["routerBlocks"] = result.routerBlocks;
-    resp["resolvedIP"] = result.resolvedIP;
-
-    if (result.routerBlocks) {
-        // Router already blocks this domain — don't add to ESP32-S3
-        resp["success"] = false;
-        resp["message"] = "Router ad blocker already blocks this domain — no need to add";
-        resp["addedToBlockList"] = false;
-        String output;
-        serializeJson(resp, output);
-        sendJSON(200, output);
-        return;
-    }
-
-    if (result.resolvedIP.equals("TIMEOUT") ||
-        result.resolvedIP.equals("INVALID_ROUTER_IP") ||
-        result.resolvedIP.equals("QUERY_BUILD_ERROR") ||
-        result.resolvedIP.equals("PARSE_ERROR")) {
-        // Can't determine — don't block blindly
-        resp["success"] = false;
-        resp["message"] = "Could not test domain against router — try again";
-        resp["addedToBlockList"] = false;
-        String output;
-        serializeJson(resp, output);
-        sendJSON(200, output);
-        return;
-    }
-
-    // Router can't block it → add to ESP32-S3 block list
     bool added = Blocklist.addDomain(domain);
-    resp["success"] = added;
-    resp["addedToBlockList"] = added;
-    resp["total"] = Blocklist.getBlockedCount();
-    if (!added) {
-        resp["message"] = "Domain already exists in block list";
+    if (added) {
+        JsonDocument resp;
+        resp["success"] = true;
+        resp["domain"] = domain;
+        resp["total"] = Blocklist.getBlockedCount();
+        String output;
+        serializeJson(resp, output);
+        sendJSON(200, output);
+    } else {
+        sendError(409, "Domain already exists or block list full");
     }
-    String output;
-    serializeJson(resp, output);
-    sendJSON(200, output);
 }
 
 void WebServerManager::handleDeleteBlocklist() {
@@ -415,58 +381,16 @@ void WebServerManager::handleBulkBlocklist() {
 
     JsonArray domains = doc["domains"].as<JsonArray>();
     int added = 0;
-    int routerBlocked = 0;
     int alreadyExists = 0;
-    int errors = 0;
-
-    JsonDocument resultDoc;
-    JsonArray detailsArr = resultDoc.to<JsonArray>();
 
     for (JsonVariant v : domains) {
-        if (!v.is<const char*>()) { errors++; continue; }
+        if (!v.is<const char*>()) continue;
         String domain = v.as<String>();
-
-        // Test each domain against the router FIRST
-        AdGuardTestResult result = AdGuardTest.testDomain(domain);
-
-        if (result.routerBlocks) {
-            // Router already blocks it — skip
-            routerBlocked++;
-            JsonObject detail = detailsArr.add<JsonObject>();
-            detail["domain"] = domain;
-            detail["status"] = "router_blocked";
-            detail["resolvedIP"] = result.resolvedIP;
-            continue;
-        }
-
-        if (result.resolvedIP.equals("TIMEOUT") ||
-            result.resolvedIP.equals("INVALID_ROUTER_IP") ||
-            result.resolvedIP.equals("QUERY_BUILD_ERROR") ||
-            result.resolvedIP.equals("PARSE_ERROR")) {
-            errors++;
-            JsonObject detail = detailsArr.add<JsonObject>();
-            detail["domain"] = domain;
-            detail["status"] = "error";
-            detail["resolvedIP"] = result.resolvedIP;
-            continue;
-        }
-
-        // Router can't block it → add to block list
-        bool didAdd = Blocklist.addDomain(domain);
-        if (didAdd) {
+        if (Blocklist.addDomain(domain)) {
             added++;
-            JsonObject detail = detailsArr.add<JsonObject>();
-            detail["domain"] = domain;
-            detail["status"] = "added";
-            detail["resolvedIP"] = result.resolvedIP;
         } else {
             alreadyExists++;
-            JsonObject detail = detailsArr.add<JsonObject>();
-            detail["domain"] = domain;
-            detail["status"] = "already_exists";
         }
-
-        delay(50); // Small delay between router tests
         yield();
     }
 
@@ -474,11 +398,8 @@ void WebServerManager::handleBulkBlocklist() {
 
     JsonDocument resp;
     resp["added"] = added;
-    resp["routerBlocked"] = routerBlocked;
     resp["alreadyExists"] = alreadyExists;
-    resp["errors"] = errors;
     resp["total"] = Blocklist.getBlockedCount();
-    resp["details"] = detailsArr;
     String output;
     serializeJson(resp, output);
     sendJSON(200, output);
@@ -635,14 +556,12 @@ void WebServerManager::handleAddReport() {
 }
 
 bool WebServerManager::verifyAndBlockReport(const String& domain) {
-    // STEP 1: Test the domain against the router's ad blocker service
-    // Only add to ESP32-S3 block list if the router CANNOT block it
-    AdGuardTestResult result = AdGuardTest.testDomain(domain);
-
-    // If the router already blocks it, don't add — it's already handled
-    if (result.routerBlocks) {
-        DEBUG_PRINTF("[Report] Router already blocks %s — skipping\n", domain.c_str());
-        // Update report status to "router_blocked"
+    // Verify the domain resolves via DNS lookup
+    IPAddress resolved;
+    if (WiFi.hostByName(domain.c_str(), resolved, 2000)) {
+        // Domain resolves — it's a real ad domain, add to blocklist
+        Blocklist.addDomain(domain);
+        // Update report status to "verified"
         String content = Storage.readFile(FS_REPORTS_PATH);
         JsonDocument doc;
         DeserializationError err = deserializeJson(doc, content);
@@ -650,9 +569,9 @@ bool WebServerManager::verifyAndBlockReport(const String& domain) {
             JsonArray arr = doc.as<JsonArray>();
             for (JsonVariant v : arr) {
                 if (v["domain"].is<String>() && v["domain"].as<String>() == domain) {
-                    v["status"] = "router_blocked";
-                    v["resolvedIP"] = result.resolvedIP;
-                    v["addedToBlockList"] = false;
+                    v["status"] = "verified";
+                    v["resolvedIP"] = resolved.toString();
+                    v["addedToBlockList"] = true;
                     break;
                 }
             }
@@ -660,43 +579,9 @@ bool WebServerManager::verifyAndBlockReport(const String& domain) {
             serializeJson(arr, output);
             Storage.writeFile(FS_REPORTS_PATH, output);
         }
-        return false; // Router handles it — no need for ESP32-S3 to block
+        return true;
     }
-
-    // STEP 2: Check for timeout/error — can't determine, don't block blindly
-    if (result.resolvedIP.equals("TIMEOUT") ||
-        result.resolvedIP.equals("INVALID_ROUTER_IP") ||
-        result.resolvedIP.equals("QUERY_BUILD_ERROR") ||
-        result.resolvedIP.equals("PARSE_ERROR")) {
-        DEBUG_PRINTF("[Report] Could not test %s against router: %s\n",
-                      domain.c_str(), result.resolvedIP.c_str());
-        return false; // Can't verify — don't block
-    }
-
-    // STEP 3: Router can't block it → domain escaped the router → add to block list
-    DEBUG_PRINTF("[Report] Router can't block %s — adding to ESP32-S3 block list\n",
-                 domain.c_str());
-    Blocklist.addDomain(domain);
-
-    // Update report status to "verified"
-    String content = Storage.readFile(FS_REPORTS_PATH);
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, content);
-    if (!err && doc.is<JsonArray>()) {
-        JsonArray arr = doc.as<JsonArray>();
-        for (JsonVariant v : arr) {
-            if (v["domain"].is<String>() && v["domain"].as<String>() == domain) {
-                v["status"] = "verified";
-                v["resolvedIP"] = result.resolvedIP;
-                v["addedToBlockList"] = true;
-                break;
-            }
-        }
-        String output;
-        serializeJson(arr, output);
-        Storage.writeFile(FS_REPORTS_PATH, output);
-    }
-    return true;
+    return false; // couldn't resolve
 }
 
 void WebServerManager::handleVerifyReport() {

@@ -1,7 +1,7 @@
 {
   "name": "esp-zero-ad",
   "version": "1.0.0",
-  "description": "ESP32-S3 DNS sinkhole — desktop setup wizard & dashboard",
+  "description": "ESP32-S3 DNS sinkhole \u2014 desktop setup wizard & dashboard",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -11,18 +11,30 @@
   "build": {
     "appId": "com.espxero.ad",
     "productName": "ESP-Zero-Ad",
-    "directories": { "output": "release" },
-    "files": ["main.js", "renderer/**/*", "../wizard.html"],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "wizard.html",
+      "icon.png"
+    ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "icon.png"
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "icon": "icon.png"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "icon": "icon.png"
     }
   },

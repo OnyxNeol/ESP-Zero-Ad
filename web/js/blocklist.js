@@ -33,8 +33,8 @@ const BlocklistView = {
 
         <div class="card">
           <div class="card-header"><span class="card-title">Quick Actions</span></div>
-          <p class="muted mb-16" style="font-size:0.85rem">Test common ad domains against your router first. Only domains the router can't block get added.</p>
-          <button id="import-common-btn" class="btn btn-block mb-16">Test & Import Common Ad Domains</button>
+          <p class="muted mb-16" style="font-size:0.85rem">Import common ad/tracking domains to your block list.</p>
+          <button id="import-common-btn" class="btn btn-block mb-16">Import Common Ad Domains</button>
           <button id="clear-all-btn" class="btn btn-danger btn-block">Clear All Blocked Domains</button>
           <div class="mt-24">
             <div class="info-row">
@@ -175,21 +175,15 @@ const BlocklistView = {
     input.classList.remove('error');
     const btn = document.getElementById('add-domain-btn');
     btn.disabled = true;
-    btn.innerHTML = '<div class="spinner spinner-sm"></div> Testing…';
+    btn.innerHTML = '<div class="spinner spinner-sm"></div> Adding';
     try {
-      const result = await API.addBlock(domain);
-      if (result.routerBlocks) {
-        Toast.info('Router Handles It', `${domain} is already blocked by your router's ad blocker service — no need to add.`);
-      } else if (result.success === false && result.message) {
-        Toast.warning('Not Added', result.message);
-      } else {
-        Toast.success('Added', `${domain} escaped the router — added to ESP32-S3 block list.`);
-        input.value = '';
-        this.page = 0;
-        this.search = '';
-        document.getElementById('bl-search').value = '';
-        await this.load();
-      }
+      await API.addBlock(domain);
+      Toast.success('Added', `${domain} added to block list.`);
+      input.value = '';
+      this.page = 0;
+      this.search = '';
+      document.getElementById('bl-search').value = '';
+      await this.load();
     } catch (err) {
       Toast.error('Add Failed', err.message);
     }
@@ -274,7 +268,7 @@ const BlocklistView = {
       'facebook.net', 'ads.facebook.com', 'analytics.facebook.com'
     ];
     App.confirm(
-      'Test & Import Common Ad Domains',
+      'Import Common Ad Domains',
       `This will add ${common.length} common ad/tracking domains to your block list.`,
       async () => {
         try {

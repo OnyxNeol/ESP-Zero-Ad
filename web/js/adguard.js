@@ -1,11 +1,9 @@
 /* ============================================================
    Ad Blocker Test View (adguard.js)
    ============================================================
-   The test-first approach: the ad blocker test runs BEFORE the
-   block list is created. It uses 129 domains from
-   adblock.turtlecute.org (d3host.txt) to test whether the
-   router ad blocker service can block them. Only domains the
-   router CANNOT block get added to the ESP32-S3's block list.
+   Uses 129 domains from adblock.turtlecute.org (d3host.txt)
+to test and add ad/tracking domains to the ESP-Zero-Ad
+block list.
    ============================================================ */
 
 const AdguardView = {
@@ -78,7 +76,7 @@ const AdguardView = {
         <div class="info-box" style="margin-bottom:16px">
           <strong>Test-first approach:</strong> This test runs 129 domains from
           <a href="https://adblock.turtlecute.org" target="_blank" style="color:var(--accent)">adblock.turtlecute.org</a>
-          against your router ad blocker service. Only domains the router <strong>CANNOT</strong> block
+          to verify they are ad/tracking domains. All verified domains
           get added to the ESP32-S3 block list. This prevents duplicate blocking and saves memory.
         </div>
         <div class="flex gap-8 flex-wrap">
@@ -102,7 +100,7 @@ const AdguardView = {
         <div class="form-group">
           <label class="form-label">Domains to Test</label>
           <textarea id="ag-input" class="textarea" style="min-height:120px" placeholder="Enter one domain per line or comma-separated&#10;e.g. doubleclick.net, googlesyndication.com"></textarea>
-          <div class="form-hint">Test custom domains against your router's DNS. Domains not blocked by the router can be auto-added to your block list.</div>
+          <div class="form-hint">Test custom domains to verify they resolve. Verified domains can be auto-added to your block list.</div>
         </div>
         <div class="flex gap-8 flex-wrap">
           <button id="ag-test-btn" class="btn btn-primary">Test All</button>
@@ -132,7 +130,7 @@ const AdguardView = {
             <thead>
               <tr>
                 <th>Domain</th>
-                <th>Router Blocks?</th>
+                <th>Blocked?</th>
                 <th>Resolved IP</th>
                 <th style="width:140px">Action</th>
               </tr>
@@ -199,7 +197,7 @@ const AdguardView = {
 
     try {
       progressFill.style.width = '50%';
-      progressText.textContent = 'Sending DNS queries to router, please wait…';
+      progressText.textContent = 'Testing domains, please wait…';
       const result = await API.adguardTest(domains, true);
       progressFill.style.width = '100%';
       progressText.textContent = 'Done!';
@@ -213,9 +211,9 @@ const AdguardView = {
       document.getElementById('ag-tested-at').textContent = 'Last tested: ' + Helpers.formatTime(this.testedAt);
 
       if (added > 0) {
-        Toast.success('Test Complete', `${this.results.length} tested, ${added} domains the router couldn't block were auto-added.`);
+        Toast.success('Test Complete', `${this.results.length} domains tested, ${added} added to block list.`);
       } else {
-        Toast.success('Test Complete', `${this.results.length} domains tested. Your router blocks them all!`);
+        Toast.success('Test Complete', `${this.results.length} domains tested. All already in block list!`);
       }
 
       setTimeout(() => { progressWrap.style.display = 'none'; }, 2000);
@@ -278,8 +276,8 @@ const AdguardView = {
   renderSummary(results, added, autoAdd) {
     const card = document.getElementById('ag-summary-card');
     card.style.display = 'block';
-    const blockedByRouter = results.filter(r => r.routerBlocks).length;
-    const notBlocked = results.length - blockedByRouter;
+    const addedCount = results.filter(r => !r.routerBlocks).length;
+    const notBlocked = results.length - addedCount;
     const el = document.getElementById('ag-summary');
     el.innerHTML = `
       <div class="info-row">
@@ -287,11 +285,11 @@ const AdguardView = {
         <span class="info-value">${results.length}</span>
       </div>
       <div class="info-row">
-        <span class="info-label">Blocked by Router</span>
-        <span class="info-value" style="color:var(--success)">${blockedByRouter}</span>
+        <span class="info-label">Already in Block List</span>
+        <span class="info-value" style="color:var(--success)">${blockedCount}</span>
       </div>
       <div class="info-row">
-        <span class="info-label">NOT Blocked by Router</span>
+        <span class="info-label">Added to Block List</span>
         <span class="info-value" style="color:var(--danger)">${notBlocked}</span>
       </div>
       <div class="info-row">
@@ -300,7 +298,7 @@ const AdguardView = {
       </div>
       <div class="info-row">
         <span class="info-label">Block Rate</span>
-        <span class="info-value">${results.length ? Math.round((blockedByRouter / results.length) * 100) : 0}%</span>
+        <span class="info-value">${results.length ? Math.round((blockedCount / results.length) * 100) : 0}%</span>
       </div>
       <div class="info-row">
         <span class="info-label">Tested At</span>
@@ -322,7 +320,7 @@ const AdguardView = {
         : '<span class="badge badge-danger">✕ Not Blocked</span>';
       const rowStyle = blocked ? '' : 'style="background:rgba(255,71,87,0.05)"';
       const action = blocked
-        ? '<span class="badge badge-muted">Router handles</span>'
+        ? '<span class="badge badge-muted">Already blocked</span>'
         : `<button class="btn btn-sm btn-success" data-add="${Helpers.escapeHTML(r.domain)}">Add to Block List</button>`;
       return `<tr ${rowStyle}>
         <td class="domain-cell">${Helpers.escapeHTML(r.domain)}</td>

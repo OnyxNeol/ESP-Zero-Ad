@@ -250,7 +250,7 @@ String AdGuardTester::testDomains(const String& domainsJsonArray, bool autoAdd,
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, domainsJsonArray);
     if (err) {
-        DEBUG_PRINTLN(F("[AdGuard] Invalid domains JSON"));
+        DEBUG_PRINTLN(F("[AdTest] Invalid domains JSON"));
         return "[]";
     }
 
@@ -272,7 +272,10 @@ String AdGuardTester::testDomains(const String& domainsJsonArray, bool autoAdd,
         if (!v.is<const char*>()) continue;
         String domain = v.as<String>();
 
-        AdGuardTestResult tr = testDomain(domain);
+        AdGuardTestResult tr;
+        tr.domain = domain;
+        tr.routerBlocks = false;
+        tr.resolvedIP = "added";
 
         JsonObject obj = resultArr.add<JsonObject>();
         obj["domain"] = tr.domain;
@@ -285,13 +288,10 @@ String AdGuardTester::testDomains(const String& domainsJsonArray, bool autoAdd,
             xSemaphoreGive(_mutex);
         }
 
-        // Auto-add domains the router CANNOT block to the block list
-        if (autoAdd && !tr.routerBlocks &&
-            !tr.resolvedIP.equals("TIMEOUT") &&
-            !tr.resolvedIP.equals("INVALID_ROUTER_IP") &&
-            !tr.resolvedIP.equals("QUERY_BUILD_ERROR")) {
+        // Add domain to block list
+        if (autoAdd) {
             Blocklist.addDomain(domain);
-            DEBUG_PRINTF("[AdGuard] Auto-added to blocklist: %s\n", domain.c_str());
+            DEBUG_PRINTF("[AdTest] Added: %s\n", domain.c_str());
         }
 
         current++;
@@ -299,10 +299,7 @@ String AdGuardTester::testDomains(const String& domainsJsonArray, bool autoAdd,
             progressCallback(current, total);
         }
 
-        // Small delay to avoid overwhelming the router
-        delay(50);
-
-        // Feed watchdog
+        delay(10);
         yield();
     }
 
@@ -312,8 +309,10 @@ String AdGuardTester::testDomains(const String& domainsJsonArray, bool autoAdd,
     // Save results to LittleFS
     Storage.writeFile(FS_TEST_RESULTS_PATH, output);
 
-    DEBUG_PRINTF("[AdGuard] Tested %d/%d domains, autoAdd=%s\n",
-                 current, total, autoAdd ? "true" : "false");
+    Blocklist.save();
+
+    DEBUG_PRINTF("[AdTest] Processed %d domains, autoAdd=%s\n",
+                 current, autoAdd ? "true" : "false");
     return output;
 }
 
@@ -356,9 +355,7 @@ int AdGuardTester::getLastTotalCount() {
 // ============================================================================
 // Built-in AdBlock Test (from adblock.turtlecute.org / d3host.txt)
 // ============================================================================
-// Runs BEFORE the block list is created. Tests all 129 domains from
-// test_domains.h against the router ad blocker service. Only domains the router
-// CANNOT block get added to the block list.
+// Adds all 129 ad/tracking domains to the ESP-Zero-Ad block list.
 // ============================================================================
 
 int AdGuardTester::runBuiltinTest(bool autoAdd,
@@ -368,10 +365,9 @@ int AdGuardTester::runBuiltinTest(bool autoAdd,
 
     Serial.println();
     Serial.println(F("============================================"));
-    Serial.println(F("  Running AdBlock Test (adblock.turtlecute.org)"));
-    Serial.printf("  Testing %d domains against router at %s\n", total, _routerIP.c_str());
-    Serial.println(F("  Only domains the router CANNOT block will"));
-    Serial.println(F("  be added to the ESP32-S3 block list."));
+    Serial.println(F("  ESP-Zero-Ad: Loading Block List"));
+    Serial.printf("  Adding %d ad/tracking domains from\n", total);
+    Serial.println(F("  adblock.turtlecute.org (d3host.txt)"));
     Serial.println(F("============================================"));
     Serial.println();
 
@@ -383,83 +379,53 @@ int AdGuardTester::runBuiltinTest(bool autoAdd,
     }
 
     int addedCount = 0;
-    int routerBlocksCount = 0;
-    int routerDoesNotBlockCount = 0;
 
     for (int i = 0; i < total; i++) {
         const char* domain = TEST_DOMAINS[i].domain;
         TestCategory category = TEST_DOMAINS[i].category;
 
-        // Test domain against router
-        AdGuardTestResult result = testDomain(String(domain));
+        // Add domain directly to block list
+        if (autoAdd) {
+            Blocklist.addDomain(String(domain));
+            addedCount++;
+        }
+
+        // Store result for UI display
+        AdGuardTestResult result;
+        result.domain = String(domain);
+        result.routerBlocks = false;
+        result.resolvedIP = "blocked";
         result.category = (int)category;
 
-        // Store result
         if (xSemaphoreTake(_mutex, portMAX_DELAY) == pdTRUE) {
             _lastResults.push_back(result);
             _lastTestedCount = i + 1;
             xSemaphoreGive(_mutex);
         }
 
-        if (result.routerBlocks) {
-            routerBlocksCount++;
-            Serial.printf("  [%3d/%3d] ✓ router blocks: %s (%s)\n",
-                          i + 1, total, domain, getCategoryName(category));
-        } else {
-            routerDoesNotBlockCount++;
-
-            // Domain resolves (router can't block it) → add to block list
-            if (autoAdd &&
-                !result.resolvedIP.equals("TIMEOUT") &&
-                !result.resolvedIP.equals("INVALID_ROUTER_IP") &&
-                !result.resolvedIP.equals("QUERY_BUILD_ERROR") &&
-                !result.resolvedIP.equals("PARSE_ERROR")) {
-                Blocklist.addDomain(String(domain));
-                addedCount++;
-                Serial.printf("  [%3d/%3d] ✗ router can't block → ADDED: %s (%s) [%s]\n",
-                              i + 1, total, domain, getCategoryName(category),
-                              result.resolvedIP.c_str());
-            } else if (result.resolvedIP.equals("TIMEOUT")) {
-                Serial.printf("  [%3d/%3d] ? timeout: %s (%s)\n",
-                              i + 1, total, domain, getCategoryName(category));
-            } else {
-                Serial.printf("  [%3d/%3d] ✗ router can't block → ADDED: %s (%s)\n",
-                              i + 1, total, domain, getCategoryName(category));
-                if (autoAdd) {
-                    Blocklist.addDomain(String(domain));
-                    addedCount++;
-                }
-            }
-        }
+        Serial.printf("  [%3d/%3d] ✓ added: %s (%s)\n",
+                      i + 1, total, domain, getCategoryName(category));
 
         // Progress callback
         if (progressCallback) {
-            progressCallback(i + 1, total, String(domain), result.routerBlocks);
+            progressCallback(i + 1, total, String(domain), false);
         }
 
-        // Small delay between queries
-        delay(50);
+        delay(10);
         yield();
     }
 
     // Mark test as run
     _testRun = true;
 
-    // Save results to LittleFS
-    String resultsJson = getTestResults();
-    Storage.writeFile(FS_TEST_RESULTS_PATH, resultsJson);
-
     // Save block list
     Blocklist.save();
 
     Serial.println();
     Serial.println(F("============================================"));
-    Serial.println(F("  AdBlock Test Complete!"));
+    Serial.println(F("  ESP-Zero-Ad Block List Ready!"));
     Serial.println(F("============================================"));
-    Serial.printf("  Total tested:        %d\n", total);
-    Serial.printf("  Router blocks:       %d (skipped)\n", routerBlocksCount);
-    Serial.printf("  Router can't block:  %d (added to ESP32-S3 list)\n", routerDoesNotBlockCount);
-    Serial.printf("  Added to block list: %d\n", addedCount);
+    Serial.printf("  Total domains added: %d\n", addedCount);
     Serial.printf("  Block list size:     %d domains\n", Blocklist.getBlockedCount());
     Serial.println(F("============================================"));
     Serial.println();

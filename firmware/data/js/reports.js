@@ -31,7 +31,7 @@ const ReportsView = {
             <button id="rpt-submit" class="btn btn-primary btn-block">Submit & Verify Report</button>
           </div>
         </div>
-        <div class="form-hint">Submitting a report tests the domain against your router's ad blocker service. If the router CAN'T block it, the domain is added to the ESP32-S3 block list. If the router already handles it, the report is marked as router-blocked.</div>
+        <div class="form-hint">Submitting a report verifies the domain via DNS lookup. If it resolves and isn't already blocked, it will be added to your block list automatically.</div>
       </div>
 
       <div class="card">

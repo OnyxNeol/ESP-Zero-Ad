@@ -9,12 +9,7 @@ const SettingsView = {
       <div class="grid-2 mb-24">
         <div class="card">
           <div class="card-header"><span class="card-title">Network Configuration</span></div>
-          <div class="form-group">
-            <label class="form-label">Router IP (for ad blocker testing)</label>
-            <input type="text" id="set-router-ip" class="input" placeholder="192.168.1.1" autocomplete="off">
-            <div class="form-hint">The IP address of your router/DNS server used for ad blocker domain tests.</div>
-          </div>
-          <div class="form-group">
+<div class="form-group">
             <label class="form-label">Primary Upstream DNS</label>
             <input type="text" id="set-dns-primary" class="input" placeholder="8.8.8.8" autocomplete="off">
           </div>
@@ -102,7 +97,6 @@ const SettingsView = {
   async loadSettings() {
     try {
       const data = await API.getSettings();
-      if (data.routerIP) document.getElementById('set-router-ip').value = data.routerIP;
       if (data.upstreamDNS) {
         const dns = data.upstreamDNS.split(',');
         document.getElementById('set-dns-primary').value = (dns[0] || '').trim();
@@ -130,16 +124,10 @@ const SettingsView = {
   },
 
   async saveNetwork() {
-    const routerIP = document.getElementById('set-router-ip').value.trim();
     const dns1 = document.getElementById('set-dns-primary').value.trim();
     const dns2 = document.getElementById('set-dns-secondary').value.trim();
 
-    if (routerIP && !Helpers.isValidIP(routerIP)) {
-      Toast.error('Invalid IP', 'Router IP address is not valid.');
-      document.getElementById('set-router-ip').classList.add('error');
-      return;
-    }
-    document.getElementById('set-router-ip').classList.remove('error');
+    
 
     if (dns1 && !Helpers.isValidIP(dns1)) {
       Toast.error('Invalid DNS', 'Primary DNS is not a valid IP.');
@@ -161,7 +149,7 @@ const SettingsView = {
     btn.innerHTML = '<div class="spinner spinner-sm"></div> Saving…';
 
     try {
-      await API.saveSettings({ routerIP, upstreamDNS });
+      await API.saveSettings({ upstreamDNS });
       Toast.success('Saved', 'Network settings updated successfully.');
     } catch (err) {
       Toast.error('Save Failed', err.message);

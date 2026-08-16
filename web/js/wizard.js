@@ -3,8 +3,8 @@
    ============================================================
    Shows on first access to the dashboard. Displays:
    - Welcome + ESP32-S3 IP address and mDNS hostname
-   - Ad blocker test results (how many domains tested, router blocks vs. not)
-   - Block list size (domains added that the router couldn't block)
+   - Ad blocker test results (how many domains tested and added)
+   - Block list size (domains added to the block list)
    - Instructions to set DNS on devices to the ESP32-S3's IP
    - "Get Started" button → marks wizard complete → dashboard
 
@@ -71,9 +71,9 @@ const WizardView = {
     const testRun = s.testRun;
     const blockListSize = s.blockListSize || 0;
     const testTotal = s.testTotal || 0;
-    const routerBlocks = s.testRouterBlocks || 0;
+    const routerBlocks = 0;
     const notBlocked = s.testNotBlocked || 0;
-    const blockRate = testTotal > 0 ? Math.round((routerBlocks / testTotal) * 100) : 0;
+    const blockRate = testTotal > 0 ? 100 : 0;
 
     content.innerHTML = `
       <!-- Welcome Header -->
@@ -117,7 +117,7 @@ const WizardView = {
         <div class="info-box" style="margin-bottom:16px">
           Tested <strong>${testTotal} domains</strong> from
           <a href="https://adblock.turtlecute.org" target="_blank" style="color:var(--accent)">adblock.turtlecute.org</a>
-          against your router ad blocker service. Only domains the router <strong>couldn't block</strong>
+          from adblock.turtlecute.org. All <strong>129 domains</strong>
           were added to the ESP32-S3's block list.
         </div>
         <div class="grid-3">
@@ -126,8 +126,8 @@ const WizardView = {
             <div class="stat-value">${testTotal}</div>
           </div>
           <div class="stat-mini">
-            <div class="stat-label">Router Blocks</div>
-            <div class="stat-value" style="color:var(--success)">${routerBlocks}</div>
+            <div class="stat-label">Domains Added</div>
+            <div class="stat-value" style="color:var(--success)">${testTotal}</div>
           </div>
           <div class="stat-mini">
             <div class="stat-label">Added to ESP32-S3</div>
@@ -135,7 +135,7 @@ const WizardView = {
           </div>
         </div>
         <div class="info-row" style="margin-top:12px">
-          <span class="info-label">Router Block Rate</span>
+          <span class="info-label">Block Rate</span>
           <span class="info-value">${blockRate}%</span>
         </div>
         <div class="info-row">

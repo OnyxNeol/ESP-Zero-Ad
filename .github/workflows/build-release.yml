@@ -25,6 +25,9 @@ jobs:
         working-directory: desktop
         run: npm install
 
+      - name: Copy wizard to desktop dir
+        run: cp wizard.html desktop/wizard.html
+
       - name: Build desktop app
         working-directory: desktop
         run: npm run build
@@ -59,7 +62,7 @@ jobs:
       - name: Collect binaries
         run: |
           mkdir -p firmware-release
-          BUILD_DIR="firmware/.pio/build/esp32-s3-devkitc-1"
+          BUILD_DIR="firmware/.pio/build/esp32s3"
           cp "$BUILD_DIR/firmware.bin" firmware-release/
           cp "$BUILD_DIR/bootloader.bin" firmware-release/
           cp "$BUILD_DIR/partitions.bin" firmware-release/

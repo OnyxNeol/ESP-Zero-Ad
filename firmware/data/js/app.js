@@ -270,9 +270,7 @@ App.saveAPIKey = function () {
 /* ===== Router ===== */
 App.routes = {
   dashboard: { title: 'Dashboard', render: () => DashboardView.render() },
-  overall: { title: 'Overall', render: () => OverallView.render() },
   blocklist: { title: 'Block List', render: () => BlocklistView.render() },
-  router: { title: 'Router Reports', render: () => RouterView.render() },
   adguard: { title: 'Ad Blocker Test', render: () => AdguardView.render() },
   reports: { title: 'Ad Reports', render: () => ReportsView.render() },
   settings: { title: 'Settings', render: () => SettingsView.render() }
